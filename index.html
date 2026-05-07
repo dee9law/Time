@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Mawaqit · مواقيت</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --surface-elevated: #1e1e1e;
+    --text: #e8e8e8;
+    --text-secondary: #888888;
+    --text-muted: #555555;
+    --border: #2a2a2a;
+    --accent: #c9a96e;
+    --accent-light: #d4b87a;
+    --green: #4a7c59;
+    --green-light: #5a9068;
+    --red: #b85450;
+    --red-light: #c96a66;
+    --amber: #c9a96e;
+    --mono: 'IBM Plex Mono', monospace;
+    --arabic: 'Noto Naskh Arabic', serif;
+    --sans: 'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); font-family: var(--sans); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+  .header { padding: 28px 20px 16px; text-align: center; background: var(--bg); }
+  .header h1 { font-family: var(--arabic); font-size: 32px; font-weight: 700; letter-spacing: 3px; color: var(--text); }
+  .header .subtitle { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 3px; color: var(--text-secondary); margin-top: 6px; }
+  .header .live-clock { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-top: 10px; letter-spacing: 2px; }
+
+  .nav { display: flex; justify-content: center; gap: 10px; padding: 16px 20px; background: var(--bg); }
+  .nav-btn { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 2px; padding: 10px 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); cursor: pointer; border-radius: 6px; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+  .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .nav-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+
+  .screen { display: none; padding: 16px; max-width: 720px; margin: 0 auto; min-height: calc(100vh - 180px); }
+  .screen.active { display: block; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+  .card h2 { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 2.5px; color: var(--text-secondary); margin-bottom: 20px; }
+
+  .coords-display { font-family: var(--mono); font-size: 14px; color: var(--accent); margin-bottom: 12px; }
+  .location-name { font-size: 14px; color: var(--text-secondary); margin-bottom: 20px; }
+
+  /* Simple map canvas */
+  #mapCanvas { width: 100%; height: 280px; border-radius: 8px; border: 1px solid var(--border); background: #1a1a2e; cursor: crosshair; touch-action: none; }
+  .map-controls { display: flex; gap: 8px; margin-top: 12px; margin-bottom: 12px; }
+  .map-btn { flex: 1; font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; padding: 8px; border: 1px solid var(--border); background: var(--surface-elevated); color: var(--text-secondary); cursor: pointer; border-radius: 6px; -webkit-tap-highlight-color: transparent; }
+  .map-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-primary { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 2px; padding: 14px 24px; background: var(--accent); color: var(--bg); border: none; border-radius: 8px; cursor: pointer; width: 100%; transition: all 0.2s; -webkit-tap-highlight-color: transparent; font-weight: 600; }
+  .btn-primary:hover { background: var(--accent-light); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .gps-btn { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; padding: 12px 16px; background: var(--surface-elevated); border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; border-radius: 8px; margin-bottom: 12px; width: 100%; -webkit-tap-highlight-color: transparent; }
+  .gps-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .prayer-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; transition: all 0.3s; }
+  .prayer-card.forbidden { border-color: var(--red); background: linear-gradient(135deg, var(--surface) 0%, rgba(184,84,80,0.1) 100%); }
+  .prayer-card.allowed { border-color: var(--green); background: linear-gradient(135deg, var(--surface) 0%, rgba(74,124,89,0.1) 100%); }
+  .prayer-card.past-preferred { border-color: var(--amber); background: linear-gradient(135deg, var(--surface) 0%, rgba(201,169,110,0.1) 100%); }
+  .prayer-info { flex: 1; min-width: 0; }
+  .prayer-name-ar { font-family: var(--arabic); font-size: 24px; font-weight: 600; color: var(--text); }
+  .prayer-name-en { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-secondary); margin-top: 4px; }
+  .prayer-time { font-family: var(--mono); font-size: 26px; font-weight: 500; text-align: right; white-space: nowrap; color: var(--text); }
+  .status-text { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 6px; text-align: right; }
+  .status-text.forbidden { color: var(--red); }
+  .status-text.allowed { color: var(--green); }
+  .status-text.upcoming { color: var(--green-light); }
+  .status-text.past { color: var(--amber); }
+
+  .range-controls { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+  .range-btns { display: flex; gap: 10px; margin-bottom: 20px; }
+  .range-btn { flex: 1; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 12px; border: 1px solid var(--border); background: var(--surface-elevated); color: var(--text-secondary); cursor: pointer; border-radius: 8px; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+  .range-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .range-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(201,169,110,0.1); }
+
+  .range-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .range-table th { text-align: left; padding: 12px 8px; border-bottom: 2px solid var(--border); font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; font-size: 9px; color: var(--text-muted); }
+  .range-table td { padding: 12px 8px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+  .range-table td:first-child { color: var(--text); font-weight: 500; }
+  .range-table tr:hover td { background: var(--surface-elevated); }
+
+  .export-btn { margin-top: 20px; }
+  .export-status { font-family: var(--mono); font-size: 10px; color: var(--green); margin-top: 12px; text-align: center; }
+  .export-status.error { color: var(--red); }
+
+  .footer { text-align: center; padding: 32px 24px; font-family: var(--mono); font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; border-top: 1px solid var(--border); margin-top: 40px; }
+
+  .error-box { background: rgba(184,84,80,0.1); border: 1px solid var(--red); color: var(--red-light); padding: 14px; border-radius: 8px; font-family: var(--mono); font-size: 10px; margin: 12px 0; line-height: 1.5; }
+  .loading { text-align: center; padding: 40px; font-family: var(--mono); font-size: 11px; color: var(--text-secondary); letter-spacing: 2px; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .section-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 2.5px; color: var(--text-muted); margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  @media (max-width: 480px) {
+    .header h1 { font-size: 26px; }
+    .prayer-time { font-size: 22px; }
+    .prayer-card { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .prayer-time, .status-text { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>مواقيت</h1>
+  <div class="subtitle">Islamic Prayer Times · Astronomically Precise · Location Aware</div>
+  <div class="live-clock" id="liveClock">--:--:--</div>
+</div>
+
+<div class="nav">
+  <button class="nav-btn active" data-screen="location">Location</button>
+  <button class="nav-btn" data-screen="today">Today</button>
+  <button class="nav-btn" data-screen="range">Range & Export</button>
+</div>
+
+<!-- SCREEN 1: LOCATION -->
+<div class="screen active" id="screen-location">
+  <div class="card">
+    <h2>GPS Location</h2>
+    <div class="coords-display" id="coordsDisplay">No location set</div>
+    <div class="location-name" id="locationName">--</div>
+    <button class="gps-btn" id="gpsBtn">📍 Detect My Location via GPS</button>
+    <canvas id="mapCanvas"></canvas>
+    <div class="map-controls">
+      <button class="map-btn" onclick="zoomMap(1)">+ Zoom In</button>
+      <button class="map-btn" onclick="zoomMap(-1)">- Zoom Out</button>
+      <button class="map-btn" onclick="resetMap()">Reset</button>
+    </div>
+    <p style="font-family: var(--mono); font-size: 10px; color: var(--text-secondary); text-align: center; margin-bottom: 12px;">Tap/click on map to set location, or drag the pin</p>
+    <button class="btn-primary" id="confirmBtn" disabled>Confirm Location</button>
+    <div id="locError"></div>
+  </div>
+</div>
+
+<!-- SCREEN 2: TODAY'S PRAYERS -->
+<div class="screen" id="screen-today">
+  <div class="section-label">Today's Prayers</div>
+  <div id="todayPrayers">
+    <div class="loading"><span class="spinner"></span>Please set your location first</div>
+  </div>
+</div>
+
+<!-- SCREEN 3: RANGE & EXPORT -->
+<div class="screen" id="screen-range">
+  <div class="card">
+    <h2>Select Range</h2>
+    <div class="range-btns">
+      <button class="range-btn" data-days="1">1 Day</button>
+      <button class="range-btn active" data-days="7">1 Week</button>
+      <button class="range-btn" data-days="30">1 Month</button>
+    </div>
+    <div id="rangeTableContainer">
+      <div class="loading">Select a range to generate table</div>
+    </div>
+    <button class="btn-primary export-btn" id="exportBtn">Add to Google Calendar</button>
+    <div class="export-status" id="exportStatus"></div>
+  </div>
+</div>
+
+<div class="footer">Mawaqit · Static · Free · Astronomically Precise · <span id="year"></span></div>
+
+<script>
+// ==================== INLINE ADHAN.JS (Minimal Prayer Calculation) ====================
+// Based on Adhan.js algorithms - Jean Meeus astronomical formulas
+// Embedded so ZERO external dependencies needed
+
+var Adhan = (function() {
+  'use strict';
+
+  function degreesToRadians(degrees) { return degrees * Math.PI / 180; }
+  function radiansToDegrees(radians) { return radians * 180 / Math.PI; }
+
+  function sin(deg) { return Math.sin(degreesToRadians(deg)); }
+  function cos(deg) { return Math.cos(degreesToRadians(deg)); }
+  function tan(deg) { return Math.tan(degreesToRadians(deg)); }
+  function asin(x) { return radiansToDegrees(Math.asin(x)); }
+  function acos(x) { return radiansToDegrees(Math.acos(x)); }
+  function atan(x) { return radiansToDegrees(Math.atan(x)); }
+  function atan2(y, x) { return radiansToDegrees(Math.atan2(y, x)); }
+
+  function julianDate(date) {
+    var year = date.getFullYear();
+    var month = date.getMonth() + 1;
+    var day = date.getDate();
+    if (month <= 2) { year -= 1; month += 12; }
+    var A = Math.floor(year / 100);
+    var B = 2 - A + Math.floor(A / 4);
+    return Math.floor(365.25 * (year + 4716)) + Math.floor(30.6001 * (month + 1)) + day + B - 1524.5;
+  }
+
+  function sunDeclination(julianDay) {
+    var T = 2 * Math.PI * (julianDay - 2451545) / 36525;
+    var L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T;
+    var M = 357.52911 + 35999.05029 * T - 0.0001537 * T * T;
+    var e = 0.016708634 - 0.000042037 * T - 0.0000001267 * T * T;
+    var C = (1.914602 - 0.004817 * T - 0.000014 * T * T) * sin(M) +
+            (0.019993 - 0.000101 * T) * sin(2 * M) +
+            0.000289 * sin(3 * M);
+    var sunLongitude = L0 + C;
+    var Omega = 125.04 - 1934.136 * T;
+    var apparentLongitude = sunLongitude - 0.00569 - 0.00478 * sin(Omega);
+    var obliquity = 23 + 26/60 + 21.448/3600 - (46.8150/3600)*T - (0.00059/3600)*T*T + (0.001813/3600)*T*T*T;
+    var correctedObliquity = obliquity + 0.00256 * cos(Omega);
+    var declination = asin(sin(correctedObliquity) * sin(apparentLongitude));
+    var equationOfTime = (L0 - 0.0057183 - apparentLongitude + (apparentLongitude < 0 ? 360 : 0)) * 4;
+    return { declination: declination, equationOfTime: equationOfTime };
+  }
+
+  function hourAngle(latitude, declination, angle) {
+    var numerator = -sin(angle) - sin(latitude) * sin(declination);
+    var denominator = cos(latitude) * cos(declination);
+    var H = acos(numerator / denominator);
+    return isNaN(H) ? null : H;
+  }
+
+  function asrShadow(shadowLength, latitude, declination) {
+    var step1 = atan2(1, shadowLength + tan(latitude - declination));
+    var step2 = atan2(1, shadowLength + tan(latitude + declination));
+    var angle = Math.max(step1, step2);
+    return hourAngle(latitude, declination, angle);
+  }
+
+  function prayerTime(julianDay, hourAngle, longitude, timezone, isSunrise) {
+    if (hourAngle === null) return null;
+    var solarTime = 12 + (isSunrise ? -hourAngle : hourAngle) / 15 - longitude / 15 + sunDeclination(julianDay).equationOfTime / 60;
+    var localTime = solarTime - timezone;
+    var date = new Date(julianDay * 86400000 + 2440587.5 * 86400000);
+    date.setUTCHours(Math.floor(localTime));
+    date.setUTCMinutes(Math.floor((localTime % 1) * 60));
+    date.setUTCSeconds(Math.floor(((localTime % 1) * 60 % 1) * 60));
+    return date;
+  }
+
+  function solarNoon(julianDay, longitude, timezone) {
+    var eq = sunDeclination(julianDay).equationOfTime;
+    var solarTime = 12 - longitude / 15 + eq / 60;
+    var localTime = solarTime - timezone;
+    var date = new Date(julianDay * 86400000 + 2440587.5 * 86400000);
+    date.setUTCHours(Math.floor(localTime));
+    date.setUTCMinutes(Math.floor((localTime % 1) * 60));
+    date.setUTCSeconds(0);
+    return date;
+  }
+
+  function getTimezone(date) { return -date.getTimezoneOffset() / 60; }
+
+  return {
+    calculate: function(latitude, longitude, date, fajrAngle, maghribAngle, ishaAngle) {
+      var jd = julianDate(date);
+      var tz = getTimezone(date);
+      var sun = sunDeclination(jd);
+      var declination = sun.declination;
+
+      var fajrHA = hourAngle(latitude, declination, fajrAngle);
+      var sunriseHA = hourAngle(latitude, declination, 0.833);
+      var dhuhr = solarNoon(jd, longitude, tz);
+      var asrHA = asrShadow(1, latitude, declination);
+      var maghribHA = hourAngle(latitude, declination, maghribAngle);
+      var ishaHA = hourAngle(latitude, declination, ishaAngle);
+
+      var fajr = prayerTime(jd, fajrHA, longitude, tz, true);
+      var sunrise = prayerTime(jd, sunriseHA, longitude, tz, true);
+      var asr = prayerTime(jd, asrHA, longitude, tz, false);
+      var maghrib = prayerTime(jd, maghribHA, longitude, tz, false);
+      var isha = prayerTime(jd, ishaHA, longitude, tz, false);
+
+      return { fajr: fajr, sunrise: sunrise, dhuhr: dhuhr, asr: asr, maghrib: maghrib, isha: isha };
+    }
+  };
+})();
+
+// ==================== CONFIG ====================
+var CONFIG = {
+  FAJR_ANGLE: 18,
+  MAGHRIB_ANGLE: 18,
+  ISHA_ANGLE: 21,
+  GOOGLE_CLIENT_ID: '',
+  POST_FAJR_MINUTES: 15,
+  ISTIWA_MINUTES_BEFORE: 5,
+  PRAYER_DURATION: 30,
+};
+
+// ==================== STATE ====================
+var state = {
+  lat: 21.4225,
+  lng: 39.8262,
+  locationName: 'Mecca, Saudi Arabia',
+  zoom: 3,
+  centerLat: 25,
+  centerLng: 45,
+  pinLat: 21.4225,
+  pinLng: 39.8262,
+  prayerTimes: null,
+  rangeData: [],
+  googleToken: null,
+  currentRange: 7,
+  canvas: null,
+  ctx: null,
+  isDragging: false
+};
+
+// ==================== SCREEN NAVIGATION ====================
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelector('.nav-btn[data-screen="' + name + '"]').classList.add('active');
+
+  if (name === 'today') renderToday();
+  if (name === 'range') generateRange(state.currentRange);
+}
+
+document.querySelectorAll('.nav-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() { showScreen(this.dataset.screen); });
+});
+
+// ==================== CANVAS MAP ====================
+function initMap() {
+  state.canvas = document.getElementById('mapCanvas');
+  state.ctx = state.canvas.getContext('2d');
+  resizeCanvas();
+
+  state.canvas.addEventListener('mousedown', handleMapStart);
+  state.canvas.addEventListener('touchstart', handleMapStart, { passive: false });
+  state.canvas.addEventListener('mousemove', handleMapMove);
+  state.canvas.addEventListener('touchmove', handleMapMove, { passive: false });
+  state.canvas.addEventListener('mouseup', handleMapEnd);
+  state.canvas.addEventListener('touchend', handleMapEnd);
+  state.canvas.addEventListener('mouseleave', handleMapEnd);
+
+  window.addEventListener('resize', resizeCanvas);
+  drawMap();
+  updateCoords(state.pinLat, state.pinLng);
+}
+
+function resizeCanvas() {
+  var rect = state.canvas.getBoundingClientRect();
+  state.canvas.width = rect.width * window.devicePixelRatio;
+  state.canvas.height = rect.height * window.devicePixelRatio;
+  state.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  state.canvas.style.width = rect.width + 'px';
+  state.canvas.style.height = rect.height + 'px';
+  drawMap();
+}
+
+function latLngToPixel(lat, lng) {
+  var width = state.canvas.width / window.devicePixelRatio;
+  var height = state.canvas.height / window.devicePixelRatio;
+  var x = (lng - state.centerLng) / (180 / Math.pow(2, state.zoom)) * width / 360 + width / 2;
+  var y = height / 2 - (lat - state.centerLat) / (180 / Math.pow(2, state.zoom)) * height / 360;
+  return { x: x, y: y };
+}
+
+function pixelToLatLng(x, y) {
+  var width = state.canvas.width / window.devicePixelRatio;
+  var height = state.canvas.height / window.devicePixelRatio;
+  var lng = state.centerLng + (x - width / 2) / width * 360 * Math.pow(2, state.zoom) / 180;
+  var lat = state.centerLat - (y - height / 2) / height * 360 * Math.pow(2, state.zoom) / 180;
+  return { lat: Math.max(-90, Math.min(90, lat)), lng: Math.max(-180, Math.min(180, lng)) };
+}
+
+function drawMap() {
+  var ctx = state.ctx;
+  var width = state.canvas.width / window.devicePixelRatio;
+  var height = state.canvas.height / window.devicePixelRatio;
+
+  // Dark background
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, width, height);
+
+  // Grid lines
+  ctx.strokeStyle = '#2a2a4e';
+  ctx.lineWidth = 0.5;
+  var gridSpacing = Math.pow(2, 4 - state.zoom) * 30;
+  if (gridSpacing < 5) gridSpacing = 5;
+
+  for (var lng = -180; lng <= 180; lng += gridSpacing) {
+    var p1 = latLngToPixel(-90, lng);
+    var p2 = latLngToPixel(90, lng);
+    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+  }
+  for (var lat = -90; lat <= 90; lat += gridSpacing) {
+    var p1 = latLngToPixel(lat, -180);
+    var p2 = latLngToPixel(lat, 180);
+    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+  }
+
+  // Continents (simplified shapes as polygons)
+  ctx.fillStyle = '#2d2d44';
+  drawContinent(ctx, [
+    [-170,70],[-140,70],[-120,60],[-100,50],[-80,55],[-60,45],[-50,30],[-80,25],[-100,30],[-120,40],[-140,50],[-160,60]
+  ]); // North America rough
+  drawContinent(ctx, [
+    [-80,25],[-60,10],[-35,-5],[-55,-25],[-70,-50],[-75,-30],[-90,-10],[-100,10]
+  ]); // South America rough
+  drawContinent(ctx, [
+    [-10,35],[10,35],[30,30],[40,10],[30,-10],[20,-35],[10,-30],[0,-20],[-10,0],[-15,20]
+  ]); // Africa rough
+  drawContinent(ctx, [
+    [-10,35],[20,35],[40,45],[60,55],[70,70],[50,75],[20,60],[0,50]
+  ]); // Europe rough
+  drawContinent(ctx, [
+    [40,10],[60,10],[80,20],[100,20],[120,30],[140,45],[150,60],[140,70],[100,70],[80,60],[60,40],[40,30]
+  ]); // Asia rough
+  drawContinent(ctx, [
+    [110,-10],[130,-10],[150,-20],[140,-35],[120,-35],[110,-25]
+  ]); // Australia rough
+
+  // Equator
+  var eq1 = latLngToPixel(0, -180);
+  var eq2 = latLngToPixel(0, 180);
+  ctx.strokeStyle = '#c9a96e';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath(); ctx.moveTo(eq1.x, eq1.y); ctx.lineTo(eq2.x, eq2.y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Pin
+  var pin = latLngToPixel(state.pinLat, state.pinLng);
+  ctx.fillStyle = '#c9a96e';
+  ctx.beginPath();
+  ctx.arc(pin.x, pin.y, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Pin shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(pin.x, pin.y + 12, 6, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Coordinates text on canvas
+  ctx.fillStyle = '#c9a96e';
+  ctx.font = '11px "IBM Plex Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(state.pinLat.toFixed(4) + '°N · ' + state.pinLng.toFixed(4) + '°E', width / 2, height - 15);
+}
+
+function drawContinent(ctx, points) {
+  if (points.length < 3) return;
+  ctx.beginPath();
+  var start = latLngToPixel(points[0][1], points[0][0]);
+  ctx.moveTo(start.x, start.y);
+  for (var i = 1; i < points.length; i++) {
+    var p = latLngToPixel(points[i][1], points[i][0]);
+    ctx.lineTo(p.x, p.y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function handleMapStart(e) {
+  e.preventDefault();
+  state.isDragging = true;
+  var rect = state.canvas.getBoundingClientRect();
+  var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  var x = clientX - rect.left;
+  var y = clientY - rect.top;
+  var pos = pixelToLatLng(x, y);
+  state.pinLat = pos.lat;
+  state.pinLng = pos.lng;
+  drawMap();
+  updateCoords(state.pinLat, state.pinLng);
+}
+
+function handleMapMove(e) {
+  if (!state.isDragging) return;
+  e.preventDefault();
+  var rect = state.canvas.getBoundingClientRect();
+  var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  var x = clientX - rect.left;
+  var y = clientY - rect.top;
+  var pos = pixelToLatLng(x, y);
+  state.pinLat = pos.lat;
+  state.pinLng = pos.lng;
+  drawMap();
+  updateCoords(state.pinLat, state.pinLng);
+}
+
+function handleMapEnd(e) {
+  state.isDragging = false;
+}
+
+function zoomMap(delta) {
+  state.zoom = Math.max(1, Math.min(10, state.zoom + delta));
+  drawMap();
+}
+
+function resetMap() {
+  state.centerLat = 25;
+  state.centerLng = 45;
+  state.zoom = 3;
+  state.pinLat = 21.4225;
+  state.pinLng = 39.8262;
+  drawMap();
+  updateCoords(state.pinLat, state.pinLng);
+}
+
+function updateCoords(lat, lng) {
+  state.lat = lat;
+  state.lng = lng;
+  document.getElementById('coordsDisplay').textContent = lat.toFixed(4) + '°N · ' + lng.toFixed(4) + '°E';
+  document.getElementById('confirmBtn').disabled = false;
+
+  fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var name = data.display_name || data.name || 'Unknown Location';
+      state.locationName = name;
+      document.getElementById('locationName').textContent = name;
+    })
+    .catch(function() {
+      state.locationName = 'Custom Location';
+      document.getElementById('locationName').textContent = 'Custom Location';
+    });
+}
+
+function requestGPS() {
+  if (!navigator.geolocation) {
+    alert('Geolocation not supported');
+    return;
+  }
+  var btn = document.getElementById('gpsBtn');
+  btn.textContent = 'Detecting...';
+  btn.disabled = true;
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      state.pinLat = pos.coords.latitude;
+      state.pinLng = pos.coords.longitude;
+      state.centerLat = state.pinLat;
+      state.centerLng = state.pinLng;
+      state.zoom = 8;
+      drawMap();
+      updateCoords(state.pinLat, state.pinLng);
+      btn.textContent = '✓ Location Detected';
+      setTimeout(function() { btn.textContent = '📍 Detect My Location via GPS'; btn.disabled = false; }, 2000);
+    },
+    function(err) {
+      alert('GPS error: ' + err.message);
+      btn.textContent = '📍 Detect My Location via GPS';
+      btn.disabled = false;
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+document.getElementById('gpsBtn').addEventListener('click', requestGPS);
+
+document.getElementById('confirmBtn').addEventListener('click', function() {
+  renderToday();
+  generateRange(state.currentRange);
+  showScreen('today');
+});
+
+// ==================== PRAYER CALCULATIONS ====================
+function getPrayerTimesForDate(date) {
+  return Adhan.calculate(state.lat, state.lng, date, -CONFIG.FAJR_ANGLE, -CONFIG.MAGRIB_ANGLE, -CONFIG.ISHA_ANGLE);
+}
+
+function formatTime(date) {
+  if (!date || isNaN(date.getTime())) return '--:--';
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function formatDate(date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ==================== FORBIDDEN WINDOWS ====================
+function getForbiddenStatus(prayer, times, now) {
+  var fajrEnd = new Date(times.sunrise.getTime() + CONFIG.POST_FAJR_MINUTES * 60000);
+  var istiwaStart = new Date(times.dhuhr.getTime() - CONFIG.ISTIWA_MINUTES_BEFORE * 60000);
+  var maghribMs = times.maghrib.getTime();
+  var nextFajrMs = times.fajr.getTime() + 24 * 60 * 60 * 1000;
+  var astronomicalMidnight = new Date(maghribMs + (nextFajrMs - maghribMs) / 2);
+
+  switch(prayer) {
+    case 'fajr':
+      if (now >= times.fajr && now < fajrEnd) {
+        return { status: 'forbidden', label: 'FORBIDDEN ' + formatTime(times.sunrise) + '-' + formatTime(fajrEnd) };
+      }
+      if (now >= fajrEnd && now < times.sunrise) {
+        return { status: 'forbidden', label: 'FORBIDDEN ' + formatTime(times.sunrise) + '-' + formatTime(fajrEnd) };
+      }
+      return { status: 'allowed', label: '' };
+    case 'dhuhr':
+      if (now >= istiwaStart && now < times.dhuhr) {
+        return { status: 'forbidden', label: 'ISTIWA' — WAIT' };
+      }
+      return { status: 'allowed', label: 'ALLOWED NOW' };
+    case 'asr':
+      if (now >= times.asr && now < times.maghrib) {
+        return { status: 'forbidden', label: 'NAFL FORBIDDEN' };
+      }
+      return { status: 'allowed', label: 'UPCOMING' };
+    case 'maghrib':
+      return { status: 'allowed', label: 'UPCOMING' };
+    case 'isha':
+      if (now > astronomicalMidnight) {
+        return { status: 'past-preferred', label: 'PAST PREFERRED' };
+      }
+      return { status: 'allowed', label: 'UPCOMING' };
+    default:
+      return { status: 'allowed', label: '' };
+  }
+}
+
+// ==================== TODAY SCREEN ====================
+function renderToday() {
+  var container = document.getElementById('todayPrayers');
+  var now = new Date();
+  var times = getPrayerTimesForDate(now);
+
+  if (!times || !times.fajr) {
+    container.innerHTML = '<div class="loading">Calculation error. Please check location.</div>';
+    return;
+  }
+
+  state.prayerTimes = times;
+
+  var prayers = [
+    { key: 'fajr', ar: 'الفجر', en: 'Fajr', angle: '-18°' },
+    { key: 'dhuhr', ar: 'الظهر', en: 'Dhuhr · Zawal', angle: 'Solar Noon' },
+    { key: 'asr', ar: 'العصر', en: 'Asr · Shadow 1:1', angle: 'Shadow Factor 1' },
+    { key: 'maghrib', ar: 'المغرب', en: 'Maghrib', angle: '-18°' },
+    { key: 'isha', ar: 'العشاء', en: 'Isha', angle: '-21°' },
+  ];
+
+  var html = '';
+  prayers.forEach(function(p) {
+    var time = times[p.key];
+    var status = getForbiddenStatus(p.key, times, now);
+    var cardClass = status.status === 'forbidden' ? 'forbidden' : 
+                     status.status === 'past-preferred' ? 'past-preferred' : 'allowed';
+    var statusClass = status.status === 'forbidden' ? 'forbidden' : 
+                      status.status === 'past-preferred' ? 'past' : 
+                      (p.key === 'fajr' || p.key === 'dhuhr') && status.status === 'allowed' ? 'allowed' : 'upcoming';
+    var statusText = status.status === 'forbidden' ? status.label : 
+                     status.status === 'past-preferred' ? status.label :
+                     status.label || 'UPCOMING';
+
+    html += '<div class="prayer-card ' + cardClass + '">' +
+      '<div class="prayer-info">' +
+        '<div class="prayer-name-ar">' + p.ar + '</div>' +
+        '<div class="prayer-name-en">' + p.en + ' · ' + p.angle + '</div>' +
+      '</div>' +
+      '<div>' +
+        '<div class="prayer-time">' + formatTime(time) + '</div>' +
+        '<div class="status-text ' + statusClass + '">' + statusText + '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+// ==================== LIVE CLOCK ====================
+setInterval(function() {
+  var now = new Date();
+  document.getElementById('liveClock').textContent = 
+    now.toLocaleTimeString('en-US', { hour12: false }) + ' · ' + 
+    now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  if (document.getElementById('screen-today').classList.contains('active')) {
+    renderToday();
+  }
+}, 1000);
+
+// ==================== RANGE SCREEN ====================
+document.querySelectorAll('.range-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.range-btn').forEach(function(b) { b.classList.remove('active'); });
+    this.classList.add('active');
+    state.currentRange = parseInt(this.dataset.days);
+    generateRange(state.currentRange);
+  });
+});
+
+function generateRange(days) {
+  var container = document.getElementById('rangeTableContainer');
+
+  var html = '<table class="range-table"><thead><tr>' +
+    '<th>Date</th><th>Fajr</th><th>Dhuhr</th><th>Asr</th><th>Maghrib</th><th>Isha</th>' +
+    '</tr></thead><tbody>';
+
+  state.rangeData = [];
+  var today = new Date();
+
+  for (var i = 0; i < days; i++) {
+    var date = new Date(today);
+    date.setDate(today.getDate() + i);
+
+    var times = getPrayerTimesForDate(date);
+    if (!times || !times.fajr) continue;
+
+    state.rangeData.push({
+      date: date,
+      fajr: times.fajr,
+      dhuhr: times.dhuhr,
+      asr: times.asr,
+      maghrib: times.maghrib,
+      isha: times.isha,
+    });
+
+    html += '<tr>' +
+      '<td>' + formatDate(date) + '</td>' +
+      '<td>' + formatTime(times.fajr) + '</td>' +
+      '<td>' + formatTime(times.dhuhr) + '</td>' +
+      '<td>' + formatTime(times.asr) + '</td>' +
+      '<td>' + formatTime(times.maghrib) + '</td>' +
+      '<td>' + formatTime(times.isha) + '</td>' +
+    '</tr>';
+  }
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ==================== GOOGLE CALENDAR EXPORT ====================
+document.getElementById('exportBtn').addEventListener('click', function() {
+  if (!CONFIG.GOOGLE_CLIENT_ID) {
+    alert('Google Calendar export requires setup.
+
+1. Go to Google Cloud Console
+2. Enable Google Calendar API
+3. Create OAuth 2.0 Client ID
+4. Add your GitHub Pages URL
+5. Paste Client ID in config.js');
+    return;
+  }
+  if (!state.rangeData.length) {
+    alert('Please generate a range table first');
+    return;
+  }
+  alert('Google Calendar export requires OAuth setup. See README for instructions.');
+});
+
+// ==================== INIT ====================
+document.getElementById('year').textContent = new Date().getFullYear();
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMap);
+} else {
+  initMap();
+}
+</script>
+
+</body>
+</html>
