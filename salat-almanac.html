@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Salat Almanac — Astronomical Prayer Times</title>
+<style>
+:root{
+  --night:#10182B; --card:#1A2440; --card2:#202C4E; --line:#2B3A5E;
+  --sun:#F2B54B; --rose:#E08A6D; --text:#EDEBE3; --muted:#8FA0C4; --good:#7CC48F;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--night); color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  min-height:100vh; padding:16px 14px 48px;
+  background-image:radial-gradient(circle at 80% -10%, #1C2B52 0%, transparent 55%);
+}
+.wrap{max-width:680px;margin:0 auto}
+header{padding:14px 2px 20px}
+h1{
+  font-family:Palatino,"Book Antiqua",Georgia,serif;
+  font-weight:600;font-size:1.7rem;letter-spacing:.01em;line-height:1.15;
+}
+h1 .ar{color:var(--sun);font-size:1.05rem;display:block;margin-top:2px;font-weight:400}
+.sub{color:var(--muted);font-size:.82rem;margin-top:6px;max-width:46ch}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:16px;margin-bottom:14px;
+}
+.card h2{
+  font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:12px;font-weight:600;
+}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.field{flex:1;min-width:120px}
+label{display:block;font-size:.72rem;color:var(--muted);margin-bottom:4px}
+input,select{
+  width:100%;background:var(--night);border:1px solid var(--line);color:var(--text);
+  border-radius:9px;padding:10px 11px;font-size:.95rem;font-variant-numeric:tabular-nums;
+  font-family:inherit;
+}
+input:focus,select:focus,button:focus{outline:2px solid var(--sun);outline-offset:1px}
+button{
+  border:0;border-radius:10px;padding:11px 16px;font-size:.92rem;font-weight:600;
+  cursor:pointer;font-family:inherit;
+}
+.btn-sun{background:var(--sun);color:#2A1E06}
+.btn-ghost{background:var(--card2);color:var(--text);border:1px solid var(--line)}
+.btn-full{width:100%;margin-top:12px}
+.gps-note{font-size:.75rem;color:var(--muted);margin-top:8px;min-height:1em}
+/* signature: solar arc */
+.arc-card{padding:10px 8px 4px}
+svg{display:block;width:100%;height:auto}
+.arc-caption{font-size:.72rem;color:var(--muted);text-align:center;padding:6px 0 8px}
+/* times table */
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:10px 6px;text-align:left;border-bottom:1px solid var(--line);font-size:.92rem;vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.pname{font-weight:600}
+.pname .ar{color:var(--sun);font-weight:400;font-size:.85rem;margin-inline-start:6px}
+.tval{font-size:1.02rem}
+.tsub{display:block;font-size:.72rem;color:var(--muted);margin-top:2px}
+.method-tag{font-size:.66rem;color:var(--muted);letter-spacing:.05em}
+.hint{font-size:.75rem;color:var(--muted);margin-top:10px;line-height:1.5}
+.check{display:flex;align-items:center;gap:9px;margin-top:12px;font-size:.85rem}
+.check input{width:auto}
+footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px;line-height:1.6}
+@media (prefers-reduced-motion:no-preference){
+  .card{animation:rise .35s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Salat Almanac<span class="ar">مواقيت الصلاة — حساب فلكي</span></h1>
+  <p class="sub">NOAA solar-position engine. Start & end of every prayer window, computed live for any point on Earth — no tables, no server.</p>
+</header>
+
+<div class="card">
+  <h2>Location & date</h2>
+  <div class="row">
+    <div class="field"><label for="lat">Latitude</label><input id="lat" type="number" step="any" value="20.0245042"></div>
+    <div class="field"><label for="lon">Longitude</label><input id="lon" type="number" step="any" value="42.5999433"></div>
+    <div class="field"><label for="tz">UTC offset (h)</label><input id="tz" type="number" step="0.5" value="3"></div>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <div class="field"><label for="date">Date</label><input id="date" type="date"></div>
+    <div class="field" style="display:flex;align-items:flex-end">
+      <button class="btn-ghost" style="width:100%" id="gpsBtn" type="button">📍 Use my GPS</button>
+    </div>
+  </div>
+  <div class="gps-note" id="gpsNote"></div>
+</div>
+
+<div class="card arc-card">
+  <svg id="arc" viewBox="0 0 700 210" role="img" aria-label="Solar altitude arc for the selected day"></svg>
+  <div class="arc-caption" id="arcCap"></div>
+</div>
+
+<div class="card">
+  <h2>Prayer windows — <span id="dayLabel"></span></h2>
+  <table>
+    <thead><tr><th>Prayer</th><th>Starts</th><th>Ends</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <p class="hint">Iṣfirār (sun ≈5° above horizon) is a conventional approximation — it has no exact astronomical definition. Isha end = Islamic midnight (midpoint sunset → next Fajr). All values iterated to ±1 min; refraction 0.833° applied at sunrise/sunset.</p>
+</div>
+
+<div class="card">
+  <h2>Export to calendar (.ics)</h2>
+  <div class="row">
+    <div class="field"><label for="expFrom">From</label><input id="expFrom" type="date"></div>
+    <div class="field"><label for="expTo">To</label><input id="expTo" type="date"></div>
+    <div class="field"><label for="expMethod">Method</label>
+      <select id="expMethod">
+        <option value="uq">Umm al-Qura (18.5° / +90 min)</option>
+        <option value="astro">Astronomical (18° / 18°)</option>
+      </select>
+    </div>
+  </div>
+  <div class="check"><input type="checkbox" id="fullWindow"><label for="fullWindow" style="margin:0;font-size:.85rem;color:var(--text)">Events span the full prayer window (default: 30-min events, window in notes)</label></div>
+  <button class="btn-sun btn-full" id="icsBtn" type="button">⬇ Download .ics for this range</button>
+  <div class="gps-note" id="icsNote"></div>
+</div>
+
+<footer>Fajr end = sunrise · Asr preferred end = iṣfirār, necessity end = sunset · Isha end = Islamic midnight.<br>Works offline once loaded. All computation stays on this device.</footer>
+</div>
+
+<script>
+"use strict";
+const RAD = Math.PI/180;
+
+/* ---------- NOAA solar engine ---------- */
+function julianDay(y,m,d){
+  if(m<=2){y--;m+=12;}
+  const A=Math.floor(y/100), B=2-A+Math.floor(A/4);
+  return Math.floor(365.25*(y+4716))+Math.floor(30.6001*(m+1))+d+B-1524.5;
+}
+function sunParams(jd){
+  const T=(jd-2451545)/36525;
+  const L0=((280.46646+T*(36000.76983+T*0.0003032))%360+360)%360;
+  const M=357.52911+T*(35999.05029-0.0001537*T);
+  const e=0.016708634-T*(0.000042037+0.0000001267*T);
+  const Mr=M*RAD;
+  const C=Math.sin(Mr)*(1.914602-T*(0.004817+0.000014*T))
+        +Math.sin(2*Mr)*(0.019993-0.000101*T)
+        +Math.sin(3*Mr)*0.000289;
+  const omega=125.04-1934.136*T;
+  const lam=L0+C-0.00569-0.00478*Math.sin(omega*RAD);
+  const eps0=23+(26+(21.448-T*(46.815+T*(0.00059-T*0.001813)))/60)/60;
+  const eps=eps0+0.00256*Math.cos(omega*RAD);
+  const dec=Math.asin(Math.sin(eps*RAD)*Math.sin(lam*RAD))/RAD;
+  const y2=Math.tan(eps*RAD/2)**2, L0r=L0*RAD;
+  const eqt=4*( y2*Math.sin(2*L0r) - 2*e*Math.sin(Mr)
+        + 4*e*y2*Math.sin(Mr)*Math.cos(2*L0r)
+        - 0.5*y2*y2*Math.sin(4*L0r) - 1.25*e*e*Math.sin(2*Mr) )/RAD;
+  return {dec,eqt};
+}
+function solarNoon(jd0,lon,tz){
+  let t=12,dec=0;
+  for(let i=0;i<3;i++){
+    const p=sunParams(jd0+(t-tz)/24); dec=p.dec;
+    t=12+tz-lon/15-p.eqt/60;
+  }
+  return {t,dec};
+}
+function hourAngle(alt,dec,lat){
+  const c=(Math.sin(alt*RAD)-Math.sin(lat*RAD)*Math.sin(dec*RAD))/(Math.cos(lat*RAD)*Math.cos(dec*RAD));
+  if(c<-1||c>1) return NaN;
+  return Math.acos(c)/RAD;
+}
+function timeAtAlt(jd0,alt,afternoon,lat,lon,tz){
+  let t=afternoon?18:6;
+  for(let i=0;i<4;i++){
+    const noon=solarNoon(jd0,lon,tz).t;
+    const dec=sunParams(jd0+(t-tz)/24).dec;
+    const H=hourAngle(alt,dec,lat);
+    if(isNaN(H)) return NaN;
+    t=afternoon?noon+H/15:noon-H/15;
+  }
+  return t;
+}
+function asrTime(jd0,lat,lon,tz){
+  let t=15;
+  for(let i=0;i<4;i++){
+    const noon=solarNoon(jd0,lon,tz).t;
+    const dec=sunParams(jd0+(t-tz)/24).dec;
+    const alt=Math.atan(1/(1+Math.tan(Math.abs(lat-dec)*RAD)))/RAD;
+    const H=hourAngle(alt,dec,lat);
+    if(isNaN(H)) return NaN;
+    t=noon+H/15;
+  }
+  return t;
+}
+function computeDay(y,m,d,lat,lon,tz){
+  const jd0=julianDay(y,m,d);
+  const noon=solarNoon(jd0,lon,tz);
+  const r={};
+  r.noon=noon.t; r.dec=noon.dec;
+  r.fajrUQ =timeAtAlt(jd0,-18.5,false,lat,lon,tz);
+  r.fajr18 =timeAtAlt(jd0,-18.0,false,lat,lon,tz);
+  r.sunrise=timeAtAlt(jd0,-0.833,false,lat,lon,tz);
+  r.dhuhr  =noon.t+1.5/60;
+  r.asr    =asrTime(jd0,lat,lon,tz);
+  r.isfirar=timeAtAlt(jd0,5.0,true,lat,lon,tz);
+  r.sunset =timeAtAlt(jd0,-0.833,true,lat,lon,tz);
+  r.ishaUQ =isNaN(r.sunset)?NaN:r.sunset+1.5;
+  r.isha18 =timeAtAlt(jd0,-18.0,true,lat,lon,tz);
+  // next-day Fajr → Islamic midnight (per method)
+  const jd1=julianDay(y,m,d)+1;
+  const fnUQ=timeAtAlt(jd1,-18.5,false,lat,lon,tz);
+  const fn18=timeAtAlt(jd1,-18.0,false,lat,lon,tz);
+  r.midUQ=(isNaN(r.sunset)||isNaN(fnUQ))?NaN:(r.sunset+(24+fnUQ-r.sunset)/2)%24;
+  r.mid18=(isNaN(r.sunset)||isNaN(fn18))?NaN:(r.sunset+(24+fn18-r.sunset)/2)%24;
+  return r;
+}
+function fmt(t){
+  if(isNaN(t)) return "—";
+  t=((t%24)+24)%24;
+  let h=Math.floor(t), mi=Math.round((t-h)*60);
+  if(mi===60){h=(h+1)%24;mi=0;}
+  return String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0");
+}
+
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+function inputs(){
+  const lat=parseFloat($("lat").value), lon=parseFloat($("lon").value), tz=parseFloat($("tz").value);
+  const ds=$("date").value;
+  return {lat,lon,tz,ds};
+}
+function validCoords(lat,lon,tz){
+  return isFinite(lat)&&isFinite(lon)&&isFinite(tz)&&lat>=-90&&lat<=90&&lon>=-180&&lon<=180&&tz>=-12&&tz<=14;
+}
+function render(){
+  const {lat,lon,tz,ds}=inputs();
+  if(!validCoords(lat,lon,tz)||!ds) return;
+  const [y,m,d]=ds.split("-").map(Number);
+  const r=computeDay(y,m,d,lat,lon,tz);
+  $("dayLabel").textContent=ds;
+  const rows=[
+    {n:"Fajr",a:"الفجر",
+     s:`<span class="tval">${fmt(r.fajrUQ)}</span><span class="tsub method-tag">UQ 18.5°</span>
+        <span class="tval">${fmt(r.fajr18)}</span><span class="tsub method-tag">Astro 18°</span>`,
+     e:`<span class="tval">${fmt(r.sunrise)}</span><span class="tsub">sunrise</span>`},
+    {n:"Dhuhr",a:"الظهر",
+     s:`<span class="tval">${fmt(r.dhuhr)}</span><span class="tsub">zawāl ${fmt(r.noon)}</span>`,
+     e:`<span class="tval">${fmt(r.asr)}</span><span class="tsub">Asr enters</span>`},
+    {n:"Asr",a:"العصر",
+     s:`<span class="tval">${fmt(r.asr)}</span><span class="tsub">shadow = object</span>`,
+     e:`<span class="tval">${fmt(r.isfirar)}</span><span class="tsub">iṣfirār · ḍarūra ${fmt(r.sunset)}</span>`},
+    {n:"Maghrib",a:"المغرب",
+     s:`<span class="tval">${fmt(r.sunset)}</span><span class="tsub">sunset</span>`,
+     e:`<span class="tval">${fmt(r.ishaUQ)}</span><span class="tsub method-tag">UQ · Astro ${fmt(r.isha18)}</span>`},
+    {n:"Isha",a:"العشاء",
+     s:`<span class="tval">${fmt(r.ishaUQ)}</span><span class="tsub method-tag">UQ +90 min</span>
+        <span class="tval">${fmt(r.isha18)}</span><span class="tsub method-tag">Astro 18°</span>`,
+     e:`<span class="tval">${fmt(r.midUQ)}</span><span class="tsub method-tag">midnight (UQ) · Astro ${fmt(r.mid18)}</span>`},
+  ];
+  $("tbody").innerHTML=rows.map(x=>
+    `<tr><td class="pname">${x.n}<span class="ar">${x.a}</span></td><td>${x.s}</td><td>${x.e}</td></tr>`).join("");
+  drawArc(y,m,d,lat,lon,tz,r);
+}
+
+/* ---------- signature: solar altitude arc ---------- */
+function drawArc(y,m,d,lat,lon,tz,r){
+  const jd0=julianDay(y,m,d), noon=r.noon;
+  const alt=t=>{
+    const dec=sunParams(jd0+(t-tz)/24).dec;
+    const H=(t-noon)*15;
+    return Math.asin(Math.sin(lat*RAD)*Math.sin(dec*RAD)+Math.cos(lat*RAD)*Math.cos(dec*RAD)*Math.cos(H*RAD))/RAD;
+  };
+  const W=700,H0=210,horizon=118,scale=1.05;
+  const X=t=>t/24*W, Y=a=>Math.max(6,Math.min(H0-6,horizon-a*scale));
+  let path="";
+  for(let t=0;t<=24.001;t+=0.1){ path+=(t===0?"M":"L")+X(t).toFixed(1)+","+Y(alt(t)).toFixed(1); }
+  const marks=[
+    ["Fajr",r.fajrUQ,"#8FA0C4"],["Rise",r.sunrise,"#E08A6D"],["Dhuhr",r.dhuhr,"#F2B54B"],
+    ["Asr",r.asr,"#F2B54B"],["Iṣf.",r.isfirar,"#E08A6D"],["Magh.",r.sunset,"#E08A6D"],
+    ["Isha",r.ishaUQ,"#8FA0C4"]
+  ].filter(m=>!isNaN(m[1]));
+  const dots=marks.map(([n,t,c])=>{
+    const x=X(t%24), yv=Y(alt(t%24));
+    const above=alt(t%24)>0;
+    return `<circle cx="${x.toFixed(1)}" cy="${yv.toFixed(1)}" r="4" fill="${c}"/>
+      <text x="${x.toFixed(1)}" y="${(above?yv-10:yv+16).toFixed(1)}" font-size="11" fill="${c}" text-anchor="middle" font-family="system-ui">${n}</text>`;
+  }).join("");
+  $("arc").innerHTML=`
+    <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#233459"/><stop offset="${(horizon/H0).toFixed(2)}" stop-color="#1A2440"/>
+      <stop offset="1" stop-color="#121A30"/></linearGradient></defs>
+    <rect width="${W}" height="${H0}" fill="url(#sky)" rx="10"/>
+    <line x1="0" y1="${horizon}" x2="${W}" y2="${horizon}" stroke="#3A4C77" stroke-width="1" stroke-dasharray="4 4"/>
+    <path d="${path}" fill="none" stroke="#F2B54B" stroke-width="2.2"/>
+    ${dots}`;
+  $("arcCap").textContent=`Sun's altitude across the day · declination ${r.dec.toFixed(2)}° · solar noon ${fmt(r.noon)}`;
+}
+
+/* ---------- GPS ---------- */
+$("gpsBtn").addEventListener("click",()=>{
+  if(!navigator.geolocation){ $("gpsNote").textContent="Geolocation not supported on this browser."; return; }
+  $("gpsNote").textContent="Locating…";
+  navigator.geolocation.getCurrentPosition(p=>{
+    $("lat").value=p.coords.latitude.toFixed(7);
+    $("lon").value=p.coords.longitude.toFixed(7);
+    $("gpsNote").textContent=`Location set (±${Math.round(p.coords.accuracy)} m). Check the UTC offset matches this place.`;
+    render();
+  },err=>{ $("gpsNote").textContent="Location failed: "+err.message+". Enter coordinates manually."; },
+  {enableHighAccuracy:true,timeout:12000});
+});
+
+/* ---------- ICS export ---------- */
+function toUTCStamp(y,m,d,localHour,tz){
+  const ms=Date.UTC(y,m-1,d)+ (localHour-tz)*3600000;
+  const dt=new Date(ms);
+  const p=n=>String(n).padStart(2,"0");
+  return dt.getUTCFullYear()+p(dt.getUTCMonth()+1)+p(dt.getUTCDate())+"T"+p(dt.getUTCHours())+p(dt.getUTCMinutes())+p(dt.getUTCSeconds())+"Z";
+}
+function esc(s){return s.replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,");}
+$("icsBtn").addEventListener("click",()=>{
+  const {lat,lon,tz}=inputs();
+  const f=$("expFrom").value, to=$("expTo").value, method=$("expMethod").value, full=$("fullWindow").checked;
+  if(!validCoords(lat,lon,tz)||!f||!to){ $("icsNote").textContent="Set coordinates, UTC offset, and both dates first."; return; }
+  const d0=new Date(f+"T00:00:00Z"), d1=new Date(to+"T00:00:00Z");
+  const days=Math.round((d1-d0)/86400000)+1;
+  if(days<1){ $("icsNote").textContent="'To' date must be on or after 'From'."; return; }
+  if(days>400){ $("icsNote").textContent="Range too large — maximum 400 days per export."; return; }
+  let ev="";
+  const stampNow=toUTCStamp(new Date().getUTCFullYear(),new Date().getUTCMonth()+1,new Date().getUTCDate(),new Date().getUTCHours()+new Date().getUTCMinutes()/60,0);
+  for(let i=0;i<days;i++){
+    const cur=new Date(d0.getTime()+i*86400000);
+    const y=cur.getUTCFullYear(), m=cur.getUTCMonth()+1, d=cur.getUTCDate();
+    const r=computeDay(y,m,d,lat,lon,tz);
+    const fajr = method==="uq"?r.fajrUQ:r.fajr18;
+    const isha = method==="uq"?r.ishaUQ:r.isha18;
+    const mid  = method==="uq"?r.midUQ :r.mid18;
+    const list=[
+      ["Fajr صلاة الفجر", fajr, r.sunrise, `Window ends at sunrise ${fmt(r.sunrise)}.`],
+      ["Dhuhr صلاة الظهر", r.dhuhr, r.asr, `Window ends when Asr enters ${fmt(r.asr)}.`],
+      ["Asr صلاة العصر", r.asr, r.isfirar, `Preferred end (isfirar) ${fmt(r.isfirar)} · necessity end (sunset) ${fmt(r.sunset)}.`],
+      ["Maghrib صلاة المغرب", r.sunset, isha, `Window ends when Isha enters ${fmt(isha)}.`],
+      ["Isha صلاة العشاء", isha, mid<isha?mid+24:mid, `Ends at Islamic midnight ${fmt(mid)}.`]
+    ];
+    for(const [name,start,wend,note] of list){
+      if(isNaN(start)) continue;
+      const end = full && !isNaN(wend) ? wend : start+0.5;
+      ev+="BEGIN:VEVENT\r\n"
+        +"UID:"+y+m+d+"-"+name.split(" ")[0]+"-"+Math.random().toString(36).slice(2,8)+"@salat-almanac\r\n"
+        +"DTSTAMP:"+stampNow+"\r\n"
+        +"DTSTART:"+toUTCStamp(y,m,d,start,tz)+"\r\n"
+        +"DTEND:"+toUTCStamp(y,m,d,end,tz)+"\r\n"
+        +"SUMMARY:"+esc(name)+"\r\n"
+        +"DESCRIPTION:"+esc(note+" Method: "+(method==="uq"?"Umm al-Qura":"Astronomical 18°")+". Computed for "+lat.toFixed(4)+", "+lon.toFixed(4)+" (UTC"+(tz>=0?"+":"")+tz+").")+"\r\n"
+        +"END:VEVENT\r\n";
+    }
+  }
+  const ics="BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Salat Almanac//EN\r\nCALSCALE:GREGORIAN\r\n"+ev+"END:VCALENDAR\r\n";
+  const blob=new Blob([ics],{type:"text/calendar;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`prayer-times_${f}_to_${to}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+  $("icsNote").textContent=`Done — ${days} day(s), ${method==="uq"?"Umm al-Qura":"Astronomical"} method. Import the file into Google Calendar or tap it on iOS.`;
+});
+
+/* ---------- init ---------- */
+(function init(){
+  const now=new Date();
+  const iso=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+  $("date").value=iso; $("expFrom").value=iso;
+  const week=new Date(now.getTime()+6*86400000);
+  $("expTo").value=week.getFullYear()+"-"+String(week.getMonth()+1).padStart(2,"0")+"-"+String(week.getDate()).padStart(2,"0");
+  $("tz").value=(-now.getTimezoneOffset()/60);
+  // keep Bisha defaults for coords; tz from device
+  ["lat","lon","tz","date"].forEach(id=>$(id).addEventListener("input",render));
+  render();
+})();
+</script>
+</body>
+</html>
