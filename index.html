@@ -108,7 +108,7 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px;line
     <thead><tr><th>Prayer</th><th>Starts</th><th>Ends</th></tr></thead>
     <tbody id="tbody"></tbody>
   </table>
-  <p class="hint">Iṣfirār (sun ≈5° above horizon) is a conventional approximation — it has no exact astronomical definition. Isha end = Islamic midnight (midpoint sunset → next Fajr). All values iterated to ±1 min; refraction 0.833° applied at sunrise/sunset.</p>
+  <p class="hint" id="nightNote">Iṣfirār (sun ≈5° above horizon) is a conventional approximation — it has no exact astronomical definition. Isha end = Islamic midnight (midpoint sunset → next Fajr). Last third of the night (Shafi) begins at two-thirds of the sunset-to-Fajr span. All values iterated to ±1 min; refraction 0.833° applied at sunrise/sunset.</p>
 </div>
 
 <div class="card">
@@ -123,13 +123,13 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px;line
       </select>
     </div>
   </div>
-  <div class="check"><input type="checkbox" id="includeEnds" checked><label for="includeEnds" style="margin:0;font-size:.85rem;color:var(--text)">Export separate events for prayer end/exit times & Islamic midnight (30-min alert blocks)</label></div>
+  <div class="check"><input type="checkbox" id="includeEnds" checked><label for="includeEnds" style="margin:0;font-size:.85rem;color:var(--text)">Include milestones: Sunrise, Asr Iṣfirār, Islamic Midnight &amp; Last Third (Shafi)</label></div>
   <div class="check"><input type="checkbox" id="fullWindow"><label for="fullWindow" style="margin:0;font-size:.85rem;color:var(--text)">Events span the full prayer window (default: 30-min events, window in notes)</label></div>
   <button class="btn-sun btn-full" id="icsBtn" type="button">⬇ Download .ics for this range</button>
   <div class="gps-note" id="icsNote"></div>
 </div>
 
-<footer>Fajr end = sunrise · Asr preferred end = iṣfirār, necessity end = sunset · Isha end = Islamic midnight.<br>Works offline once loaded. All computation stays on this device.</footer>
+<footer>Fajr end = sunrise · Asr preferred end = iṣfirār, necessity end = sunset · Isha end = Islamic midnight · Last third = Shafi.<br>Works offline once loaded. All computation stays on this device.</footer>
 </div>
 
 <script>
@@ -215,8 +215,12 @@ function computeDay(y,m,d,lat,lon,tz){
   const jd1=julianDay(y,m,d)+1;
   const fnUQ=timeAtAlt(jd1,-18.5,false,lat,lon,tz);
   const fn18=timeAtAlt(jd1,-18.0,false,lat,lon,tz);
-  r.midUQ=(isNaN(r.sunset)||isNaN(fnUQ))?NaN:(r.sunset+(24+fnUQ-r.sunset)/2)%24;
-  r.mid18=(isNaN(r.sunset)||isNaN(fn18))?NaN:(r.sunset+(24+fn18-r.sunset)/2)%24;
+  const spanUQ=(isNaN(r.sunset)||isNaN(fnUQ))?NaN:((24+fnUQ-r.sunset)%24);
+  const span18=(isNaN(r.sunset)||isNaN(fn18))?NaN:((24+fn18-r.sunset)%24);
+  r.midUQ=isNaN(spanUQ)?NaN:(r.sunset+spanUQ/2)%24;
+  r.mid18=isNaN(span18)?NaN:(r.sunset+span18/2)%24;
+  r.lastThirdUQ=isNaN(spanUQ)?NaN:(r.sunset+(2/3)*spanUQ)%24;
+  r.lastThird18=isNaN(span18)?NaN:(r.sunset+(2/3)*span18)%24;
   return r;
 }
 function fmt(t){
@@ -261,6 +265,10 @@ function render(){
      s:`<span class="tval">${fmt(r.ishaUQ)}</span><span class="tsub method-tag">UQ +90 min</span>
         <span class="tval">${fmt(r.isha18)}</span><span class="tsub method-tag">Astro 18°</span>`,
      e:`<span class="tval">${fmt(r.midUQ)}</span><span class="tsub method-tag">midnight (UQ) · Astro ${fmt(r.mid18)}</span>`},
+    {n:"Last Third · Shafi",a:"الثلث الأخير · الشفع",
+     s:`<span class="tval">${fmt(r.lastThirdUQ)}</span><span class="tsub method-tag">UQ</span>
+        <span class="tval">${fmt(r.lastThird18)}</span><span class="tsub method-tag">Astro 18°</span>`,
+     e:`<span class="tval">${fmt(r.fajrUQ)}</span><span class="tsub method-tag">Fajr (UQ) · Astro ${fmt(r.fajr18)}</span>`},
   ];
   $("tbody").innerHTML=rows.map(x=>
     `<tr><td class="pname">${x.n}<span class="ar">${x.a}</span></td><td>${x.s}</td><td>${x.e}</td></tr>`).join("");
@@ -334,6 +342,10 @@ function makeEvent(y,m,d,tz,uidTag,startHour,endHour,summary,description,stampNo
     +"DESCRIPTION:"+esc(description)+"\r\n"
     +"END:VEVENT\r\n";
 }
+function adjAfterSunset(t,sunset){
+  if(isNaN(t)||isNaN(sunset)) return t;
+  return t < sunset ? t + 24 : t;
+}
 
 $("icsBtn").addEventListener("click",()=>{
   const {lat,lon,tz}=inputs();
@@ -357,10 +369,13 @@ $("icsBtn").addEventListener("click",()=>{
     const fajr = method==="uq"?r.fajrUQ:r.fajr18;
     const isha = method==="uq"?r.ishaUQ:r.isha18;
     const midRaw = method==="uq"?r.midUQ:r.mid18;
-    const mid = (!isNaN(midRaw) && !isNaN(r.sunset) && midRaw < r.sunset) ? midRaw + 24 : midRaw;
-    const sunsetAdj = (!isNaN(r.sunset) && !isNaN(r.asr) && r.sunset < r.asr) ? r.sunset + 24 : r.sunset;
-    const ishaAdj = (!isNaN(isha) && !isNaN(r.sunset) && isha < r.sunset) ? isha + 24 : isha;
+    const lastThirdRaw = method==="uq"?r.lastThirdUQ:r.lastThird18;
+    const mid = adjAfterSunset(midRaw, r.sunset);
+    const ishaAdj = adjAfterSunset(isha, r.sunset);
+    const lastThirdAdj = adjAfterSunset(lastThirdRaw, r.sunset);
+    const nextFajrAdj = adjAfterSunset(fajr, r.sunset);
 
+    // Core 5 prayer entry events
     const prayers=[
       {tag:"Fajr", name:"Fajr صلاة الفجر", start:fajr, wend:r.sunrise, note:`Window ends at sunrise ${fmt(r.sunrise)}.`},
       {tag:"Dhuhr", name:"Dhuhr صلاة الظهر", start:r.dhuhr, wend:r.asr, note:`Window ends when Asr enters ${fmt(r.asr)}.`},
@@ -376,17 +391,15 @@ $("icsBtn").addEventListener("click",()=>{
     }
 
     if(includeEnds){
-      const boundaryEvents=[
-        {tag:"Fajr-end", start:r.sunrise, summary:"Fajr Ends · Sunrise الشروق", desc:`Fajr prayer window ends at sunrise (${fmt(r.sunrise)}).`},
-        {tag:"Dhuhr-end", start:r.asr, summary:"Dhuhr Ends · Asr Enters دخول العصر", desc:`Dhuhr prayer window ends as Asr enters (${fmt(r.asr)}).`},
-        {tag:"Asr-pref-end", start:r.isfirar, summary:"Asr Preferred End · Iṣfirār نهاية وقت العصر المختار", desc:`Preferred Asr end at iṣfirār (${fmt(r.isfirar)}). Necessity end (sunset) is ${fmt(r.sunset)}.`},
-        {tag:"Asr-nec-end", start:sunsetAdj, summary:"Asr Necessity End · Sunset نهاية وقت العصر الضروري", desc:`Necessity Asr window ends at sunset (${fmt(r.sunset)}).`},
-        {tag:"Maghrib-end", start:ishaAdj, summary:"Maghrib Ends · Isha Enters دخول العشاء", desc:`Maghrib prayer window ends as Isha enters (${fmt(isha)}).`},
-        {tag:"Midnight-end", start:mid, summary:"Islamic Midnight · Isha Ends منتصف الليل الشرعي", desc:`Isha prayer window ends at Islamic midnight (${fmt(midRaw)}).`}
+      const standaloneTransitions=[
+        {tag:"Fajr-end", start:r.sunrise, end:r.sunrise+0.5, summary:"Fajr Ends · Sunrise الشروق", desc:`Fajr prayer window ends at sunrise (${fmt(r.sunrise)}).`},
+        {tag:"Asr-pref-end", start:r.isfirar, end:r.isfirar+0.5, summary:"Asr Preferred End · Iṣfirār نهاية وقت العصر المختار", desc:`Preferred Asr end at iṣfirār (${fmt(r.isfirar)}). Necessity window extends until Maghrib (${fmt(r.sunset)}).`},
+        {tag:"Midnight-end", start:mid, end:mid+0.5, summary:"Islamic Midnight · Isha Ends منتصف الليل الشرعي", desc:`Isha prayer window ends at Islamic midnight (${fmt(midRaw)}).`},
+        {tag:"Last-third-shafi", start:lastThirdAdj, end:(full && !isNaN(nextFajrAdj))?nextFajrAdj:lastThirdAdj+0.5, summary:"Last Third of Night · Shafi الثلث الأخير من الليل · الشفع", desc:`Last third of the night begins at ${fmt(lastThirdRaw)} (runs until Fajr at ${fmt(fajr)}).`}
       ];
-      for(const b of boundaryEvents){
+      for(const b of standaloneTransitions){
         if(isNaN(b.start)) continue;
-        ev += makeEvent(y,m,d,tz,b.tag,b.start,b.start+0.5,b.summary,b.desc+metaSuffix,stampNow);
+        ev += makeEvent(y,m,d,tz,b.tag,b.start,b.end,b.summary,b.desc+metaSuffix,stampNow);
       }
     }
   }
@@ -397,7 +410,7 @@ $("icsBtn").addEventListener("click",()=>{
   a.href=URL.createObjectURL(blob);
   a.download=`prayer-times_${f}_to_${to}.ics`;
   document.body.appendChild(a); a.click(); a.remove();
-  $("icsNote").textContent=`Done — ${days} day(s), ${methodLabel} method${includeEnds?" (including end/exit & midnight events)":""}. Import the file into Google Calendar or tap it on iOS.`;
+  $("icsNote").textContent=`Done — ${days} day(s), ${methodLabel} method. Includes Last Third of Night (Shafi) milestone.`;
 });
 
 /* ---------- init ---------- */
