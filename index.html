@@ -108,7 +108,7 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px;line
     <thead><tr><th>Prayer</th><th>Starts</th><th>Ends</th></tr></thead>
     <tbody id="tbody"></tbody>
   </table>
-  <p class="hint" id="nightNote">Iṣfirār (sun ≈5° above horizon) is a conventional approximation — it has no exact astronomical definition. Isha end = Islamic midnight (midpoint sunset → next Fajr). Last third of the night (Shafi) begins at two-thirds of the sunset-to-Fajr span. All values iterated to ±1 min; refraction 0.833° applied at sunrise/sunset.</p>
+  <p class="hint" id="nightNote">Iṣfirār (sun ≈5° above horizon) is a conventional approximation — it has no exact astronomical definition. Isha end = Islamic midnight (midpoint sunset → next Fajr). Last third of the night begins at two-thirds of the sunset-to-Fajr span. All values iterated to ±1 min; refraction 0.833° applied at sunrise/sunset.</p>
 </div>
 
 <div class="card">
@@ -123,8 +123,8 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px;line
       </select>
     </div>
   </div>
-  <div class="check"><input type="checkbox" id="includeEnds" checked><label for="includeEnds" style="margin:0;font-size:.85rem;color:var(--text)">Include milestones: Sunrise, Asr Iṣfirār, Islamic Midnight &amp; Last Third (Shafi)</label></div>
-  <div class="check"><input type="checkbox" id="fullWindow"><label for="fullWindow" style="margin:0;font-size:.85rem;color:var(--text)">Events span the full prayer window (default: 30-min events, window in notes)</label></div>
+  <div class="check"><input type="checkbox" id="includeEnds" checked><label for="includeEnds" style="margin:0;font-size:.85rem;color:var(--text)">Include milestones: Sunrise, Asr end, Midnight &amp; Last third</label></div>
+  <div class="check"><input type="checkbox" id="fullWindow"><label for="fullWindow" style="margin:0;font-size:.85rem;color:var(--text)">Events span the full prayer window (default: point-in-time events)</label></div>
   <button class="btn-sun btn-full" id="icsBtn" type="button">⬇ Download .ics for this range</button>
   <div class="gps-note" id="icsNote"></div>
 </div>
@@ -265,7 +265,7 @@ function render(){
      s:`<span class="tval">${fmt(r.ishaUQ)}</span><span class="tsub method-tag">UQ +90 min</span>
         <span class="tval">${fmt(r.isha18)}</span><span class="tsub method-tag">Astro 18°</span>`,
      e:`<span class="tval">${fmt(r.midUQ)}</span><span class="tsub method-tag">midnight (UQ) · Astro ${fmt(r.mid18)}</span>`},
-    {n:"Last Third · Shafi",a:"الثلث الأخير · الشفع",
+    {n:"Last third",a:"الثلث الأخير",
      s:`<span class="tval">${fmt(r.lastThirdUQ)}</span><span class="tsub method-tag">UQ</span>
         <span class="tval">${fmt(r.lastThird18)}</span><span class="tsub method-tag">Astro 18°</span>`,
      e:`<span class="tval">${fmt(r.fajrUQ)}</span><span class="tsub method-tag">Fajr (UQ) · Astro ${fmt(r.fajr18)}</span>`},
@@ -332,7 +332,7 @@ function toUTCStamp(y,m,d,localHour,tz){
 function esc(s){return s.replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,");}
 function makeEvent(y,m,d,tz,uidTag,startHour,endHour,summary,description,stampNow){
   if(isNaN(startHour)) return "";
-  const safeEnd = isNaN(endHour) || endHour <= startHour ? startHour + 0.5 : endHour;
+  const safeEnd = isNaN(endHour) || endHour < startHour ? startHour : endHour;
   return "BEGIN:VEVENT\r\n"
     +"UID:"+y+m+d+"-"+uidTag+"-"+Math.random().toString(36).slice(2,8)+"@salat-almanac\r\n"
     +"DTSTAMP:"+stampNow+"\r\n"
@@ -375,27 +375,26 @@ $("icsBtn").addEventListener("click",()=>{
     const lastThirdAdj = adjAfterSunset(lastThirdRaw, r.sunset);
     const nextFajrAdj = adjAfterSunset(fajr, r.sunset);
 
-    // Core 5 prayer entry events
     const prayers=[
-      {tag:"Fajr", name:"Fajr صلاة الفجر", start:fajr, wend:r.sunrise, note:`Window ends at sunrise ${fmt(r.sunrise)}.`},
-      {tag:"Dhuhr", name:"Dhuhr صلاة الظهر", start:r.dhuhr, wend:r.asr, note:`Window ends when Asr enters ${fmt(r.asr)}.`},
-      {tag:"Asr", name:"Asr صلاة العصر", start:r.asr, wend:r.isfirar, note:`Preferred end (isfirar) ${fmt(r.isfirar)} · necessity end (sunset) ${fmt(r.sunset)}.`},
-      {tag:"Maghrib", name:"Maghrib صلاة المغرب", start:r.sunset, wend:ishaAdj, note:`Window ends when Isha enters ${fmt(isha)}.`},
-      {tag:"Isha", name:"Isha صلاة العشاء", start:ishaAdj, wend:mid, note:`Ends at Islamic midnight ${fmt(midRaw)}.`}
+      {tag:"Fajr", name:"Fajr", start:fajr, wend:r.sunrise, note:`Window ends at sunrise ${fmt(r.sunrise)}.`},
+      {tag:"Dhuhr", name:"Dhuhr", start:r.dhuhr, wend:r.asr, note:`Window ends when Asr enters ${fmt(r.asr)}.`},
+      {tag:"Asr", name:"Asr", start:r.asr, wend:r.isfirar, note:`Preferred end (isfirar) ${fmt(r.isfirar)} · necessity end (sunset) ${fmt(r.sunset)}.`},
+      {tag:"Maghrib", name:"Maghrib", start:r.sunset, wend:ishaAdj, note:`Window ends when Isha enters ${fmt(isha)}.`},
+      {tag:"Isha", name:"Isha", start:ishaAdj, wend:mid, note:`Ends at Islamic midnight ${fmt(midRaw)}.`}
     ];
 
     for(const p of prayers){
       if(isNaN(p.start)) continue;
-      const end = full && !isNaN(p.wend) ? p.wend : p.start + 0.5;
+      const end = full && !isNaN(p.wend) ? p.wend : p.start;
       ev += makeEvent(y,m,d,tz,p.tag+"-start",p.start,end,p.name,p.note+metaSuffix,stampNow);
     }
 
     if(includeEnds){
       const standaloneTransitions=[
-        {tag:"Fajr-end", start:r.sunrise, end:r.sunrise+0.5, summary:"Fajr Ends · Sunrise الشروق", desc:`Fajr prayer window ends at sunrise (${fmt(r.sunrise)}).`},
-        {tag:"Asr-pref-end", start:r.isfirar, end:r.isfirar+0.5, summary:"Asr Preferred End · Iṣfirār نهاية وقت العصر المختار", desc:`Preferred Asr end at iṣfirār (${fmt(r.isfirar)}). Necessity window extends until Maghrib (${fmt(r.sunset)}).`},
-        {tag:"Midnight-end", start:mid, end:mid+0.5, summary:"Islamic Midnight · Isha Ends منتصف الليل الشرعي", desc:`Isha prayer window ends at Islamic midnight (${fmt(midRaw)}).`},
-        {tag:"Last-third-shafi", start:lastThirdAdj, end:(full && !isNaN(nextFajrAdj))?nextFajrAdj:lastThirdAdj+0.5, summary:"Last Third of Night · Shafi الثلث الأخير من الليل · الشفع", desc:`Last third of the night begins at ${fmt(lastThirdRaw)} (runs until Fajr at ${fmt(fajr)}).`}
+        {tag:"Sunrise", start:r.sunrise, end:full && !isNaN(r.sunrise)?r.sunrise:r.sunrise, summary:"Sunrise", desc:`Fajr prayer window ends at sunrise (${fmt(r.sunrise)}).`},
+        {tag:"Asr-end", start:r.isfirar, end:full && !isNaN(r.isfirar)?r.isfirar:r.isfirar, summary:"Asr end", desc:`Preferred Asr end at iṣfirār (${fmt(r.isfirar)}). Necessity window extends until Maghrib (${fmt(r.sunset)}).`},
+        {tag:"Midnight", start:mid, end:full && !isNaN(mid)?mid:mid, summary:"Midnight", desc:`Isha prayer window ends at Islamic midnight (${fmt(midRaw)}).`},
+        {tag:"Last-third", start:lastThirdAdj, end:full && !isNaN(nextFajrAdj)?nextFajrAdj:lastThirdAdj, summary:"Last third", desc:`Last third of the night begins at ${fmt(lastThirdRaw)} (runs until Fajr at ${fmt(fajr)}).`}
       ];
       for(const b of standaloneTransitions){
         if(isNaN(b.start)) continue;
@@ -410,7 +409,7 @@ $("icsBtn").addEventListener("click",()=>{
   a.href=URL.createObjectURL(blob);
   a.download=`prayer-times_${f}_to_${to}.ics`;
   document.body.appendChild(a); a.click(); a.remove();
-  $("icsNote").textContent=`Done — ${days} day(s), ${methodLabel} method. Includes Last Third of Night (Shafi) milestone.`;
+  $("icsNote").textContent=`Done — ${days} day(s), ${methodLabel} method. Point-in-time events exported.`;
 });
 
 /* ---------- init ---------- */
