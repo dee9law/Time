@@ -123,6 +123,7 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px;line
       </select>
     </div>
   </div>
+  <div class="check"><input type="checkbox" id="includeEnds" checked><label for="includeEnds" style="margin:0;font-size:.85rem;color:var(--text)">Export separate events for prayer end/exit times & Islamic midnight (30-min alert blocks)</label></div>
   <div class="check"><input type="checkbox" id="fullWindow"><label for="fullWindow" style="margin:0;font-size:.85rem;color:var(--text)">Events span the full prayer window (default: 30-min events, window in notes)</label></div>
   <button class="btn-sun btn-full" id="icsBtn" type="button">⬇ Download .ics for this range</button>
   <div class="gps-note" id="icsNote"></div>
@@ -211,7 +212,6 @@ function computeDay(y,m,d,lat,lon,tz){
   r.sunset =timeAtAlt(jd0,-0.833,true,lat,lon,tz);
   r.ishaUQ =isNaN(r.sunset)?NaN:r.sunset+1.5;
   r.isha18 =timeAtAlt(jd0,-18.0,true,lat,lon,tz);
-  // next-day Fajr → Islamic midnight (per method)
   const jd1=julianDay(y,m,d)+1;
   const fnUQ=timeAtAlt(jd1,-18.5,false,lat,lon,tz);
   const fn18=timeAtAlt(jd1,-18.0,false,lat,lon,tz);
@@ -322,50 +322,82 @@ function toUTCStamp(y,m,d,localHour,tz){
   return dt.getUTCFullYear()+p(dt.getUTCMonth()+1)+p(dt.getUTCDate())+"T"+p(dt.getUTCHours())+p(dt.getUTCMinutes())+p(dt.getUTCSeconds())+"Z";
 }
 function esc(s){return s.replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,");}
+function makeEvent(y,m,d,tz,uidTag,startHour,endHour,summary,description,stampNow){
+  if(isNaN(startHour)) return "";
+  const safeEnd = isNaN(endHour) || endHour <= startHour ? startHour + 0.5 : endHour;
+  return "BEGIN:VEVENT\r\n"
+    +"UID:"+y+m+d+"-"+uidTag+"-"+Math.random().toString(36).slice(2,8)+"@salat-almanac\r\n"
+    +"DTSTAMP:"+stampNow+"\r\n"
+    +"DTSTART:"+toUTCStamp(y,m,d,startHour,tz)+"\r\n"
+    +"DTEND:"+toUTCStamp(y,m,d,safeEnd,tz)+"\r\n"
+    +"SUMMARY:"+esc(summary)+"\r\n"
+    +"DESCRIPTION:"+esc(description)+"\r\n"
+    +"END:VEVENT\r\n";
+}
+
 $("icsBtn").addEventListener("click",()=>{
   const {lat,lon,tz}=inputs();
-  const f=$("expFrom").value, to=$("expTo").value, method=$("expMethod").value, full=$("fullWindow").checked;
+  const f=$("expFrom").value, to=$("expTo").value, method=$("expMethod").value;
+  const full=$("fullWindow").checked, includeEnds=$("includeEnds").checked;
   if(!validCoords(lat,lon,tz)||!f||!to){ $("icsNote").textContent="Set coordinates, UTC offset, and both dates first."; return; }
   const d0=new Date(f+"T00:00:00Z"), d1=new Date(to+"T00:00:00Z");
   const days=Math.round((d1-d0)/86400000)+1;
   if(days<1){ $("icsNote").textContent="'To' date must be on or after 'From'."; return; }
   if(days>400){ $("icsNote").textContent="Range too large — maximum 400 days per export."; return; }
   let ev="";
-  const stampNow=toUTCStamp(new Date().getUTCFullYear(),new Date().getUTCMonth()+1,new Date().getUTCDate(),new Date().getUTCHours()+new Date().getUTCMinutes()/60,0);
+  const nowUtc=new Date();
+  const stampNow=toUTCStamp(nowUtc.getUTCFullYear(),nowUtc.getUTCMonth()+1,nowUtc.getUTCDate(),nowUtc.getUTCHours()+nowUtc.getUTCMinutes()/60,0);
+  const methodLabel = method==="uq" ? "Umm al-Qura" : "Astronomical 18°";
+  const metaSuffix = " Method: "+methodLabel+". Computed for "+lat.toFixed(4)+", "+lon.toFixed(4)+" (UTC"+(tz>=0?"+":"")+tz+").";
+
   for(let i=0;i<days;i++){
     const cur=new Date(d0.getTime()+i*86400000);
     const y=cur.getUTCFullYear(), m=cur.getUTCMonth()+1, d=cur.getUTCDate();
     const r=computeDay(y,m,d,lat,lon,tz);
     const fajr = method==="uq"?r.fajrUQ:r.fajr18;
     const isha = method==="uq"?r.ishaUQ:r.isha18;
-    const mid  = method==="uq"?r.midUQ :r.mid18;
-    const list=[
-      ["Fajr صلاة الفجر", fajr, r.sunrise, `Window ends at sunrise ${fmt(r.sunrise)}.`],
-      ["Dhuhr صلاة الظهر", r.dhuhr, r.asr, `Window ends when Asr enters ${fmt(r.asr)}.`],
-      ["Asr صلاة العصر", r.asr, r.isfirar, `Preferred end (isfirar) ${fmt(r.isfirar)} · necessity end (sunset) ${fmt(r.sunset)}.`],
-      ["Maghrib صلاة المغرب", r.sunset, isha, `Window ends when Isha enters ${fmt(isha)}.`],
-      ["Isha صلاة العشاء", isha, mid<isha?mid+24:mid, `Ends at Islamic midnight ${fmt(mid)}.`]
+    const midRaw = method==="uq"?r.midUQ:r.mid18;
+    const mid = (!isNaN(midRaw) && !isNaN(r.sunset) && midRaw < r.sunset) ? midRaw + 24 : midRaw;
+    const sunsetAdj = (!isNaN(r.sunset) && !isNaN(r.asr) && r.sunset < r.asr) ? r.sunset + 24 : r.sunset;
+    const ishaAdj = (!isNaN(isha) && !isNaN(r.sunset) && isha < r.sunset) ? isha + 24 : isha;
+
+    const prayers=[
+      {tag:"Fajr", name:"Fajr صلاة الفجر", start:fajr, wend:r.sunrise, note:`Window ends at sunrise ${fmt(r.sunrise)}.`},
+      {tag:"Dhuhr", name:"Dhuhr صلاة الظهر", start:r.dhuhr, wend:r.asr, note:`Window ends when Asr enters ${fmt(r.asr)}.`},
+      {tag:"Asr", name:"Asr صلاة العصر", start:r.asr, wend:r.isfirar, note:`Preferred end (isfirar) ${fmt(r.isfirar)} · necessity end (sunset) ${fmt(r.sunset)}.`},
+      {tag:"Maghrib", name:"Maghrib صلاة المغرب", start:r.sunset, wend:ishaAdj, note:`Window ends when Isha enters ${fmt(isha)}.`},
+      {tag:"Isha", name:"Isha صلاة العشاء", start:ishaAdj, wend:mid, note:`Ends at Islamic midnight ${fmt(midRaw)}.`}
     ];
-    for(const [name,start,wend,note] of list){
-      if(isNaN(start)) continue;
-      const end = full && !isNaN(wend) ? wend : start+0.5;
-      ev+="BEGIN:VEVENT\r\n"
-        +"UID:"+y+m+d+"-"+name.split(" ")[0]+"-"+Math.random().toString(36).slice(2,8)+"@salat-almanac\r\n"
-        +"DTSTAMP:"+stampNow+"\r\n"
-        +"DTSTART:"+toUTCStamp(y,m,d,start,tz)+"\r\n"
-        +"DTEND:"+toUTCStamp(y,m,d,end,tz)+"\r\n"
-        +"SUMMARY:"+esc(name)+"\r\n"
-        +"DESCRIPTION:"+esc(note+" Method: "+(method==="uq"?"Umm al-Qura":"Astronomical 18°")+". Computed for "+lat.toFixed(4)+", "+lon.toFixed(4)+" (UTC"+(tz>=0?"+":"")+tz+").")+"\r\n"
-        +"END:VEVENT\r\n";
+
+    for(const p of prayers){
+      if(isNaN(p.start)) continue;
+      const end = full && !isNaN(p.wend) ? p.wend : p.start + 0.5;
+      ev += makeEvent(y,m,d,tz,p.tag+"-start",p.start,end,p.name,p.note+metaSuffix,stampNow);
+    }
+
+    if(includeEnds){
+      const boundaryEvents=[
+        {tag:"Fajr-end", start:r.sunrise, summary:"Fajr Ends · Sunrise الشروق", desc:`Fajr prayer window ends at sunrise (${fmt(r.sunrise)}).`},
+        {tag:"Dhuhr-end", start:r.asr, summary:"Dhuhr Ends · Asr Enters دخول العصر", desc:`Dhuhr prayer window ends as Asr enters (${fmt(r.asr)}).`},
+        {tag:"Asr-pref-end", start:r.isfirar, summary:"Asr Preferred End · Iṣfirār نهاية وقت العصر المختار", desc:`Preferred Asr end at iṣfirār (${fmt(r.isfirar)}). Necessity end (sunset) is ${fmt(r.sunset)}.`},
+        {tag:"Asr-nec-end", start:sunsetAdj, summary:"Asr Necessity End · Sunset نهاية وقت العصر الضروري", desc:`Necessity Asr window ends at sunset (${fmt(r.sunset)}).`},
+        {tag:"Maghrib-end", start:ishaAdj, summary:"Maghrib Ends · Isha Enters دخول العشاء", desc:`Maghrib prayer window ends as Isha enters (${fmt(isha)}).`},
+        {tag:"Midnight-end", start:mid, summary:"Islamic Midnight · Isha Ends منتصف الليل الشرعي", desc:`Isha prayer window ends at Islamic midnight (${fmt(midRaw)}).`}
+      ];
+      for(const b of boundaryEvents){
+        if(isNaN(b.start)) continue;
+        ev += makeEvent(y,m,d,tz,b.tag,b.start,b.start+0.5,b.summary,b.desc+metaSuffix,stampNow);
+      }
     }
   }
+
   const ics="BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Salat Almanac//EN\r\nCALSCALE:GREGORIAN\r\n"+ev+"END:VCALENDAR\r\n";
   const blob=new Blob([ics],{type:"text/calendar;charset=utf-8"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
   a.download=`prayer-times_${f}_to_${to}.ics`;
   document.body.appendChild(a); a.click(); a.remove();
-  $("icsNote").textContent=`Done — ${days} day(s), ${method==="uq"?"Umm al-Qura":"Astronomical"} method. Import the file into Google Calendar or tap it on iOS.`;
+  $("icsNote").textContent=`Done — ${days} day(s), ${methodLabel} method${includeEnds?" (including end/exit & midnight events)":""}. Import the file into Google Calendar or tap it on iOS.`;
 });
 
 /* ---------- init ---------- */
@@ -376,7 +408,6 @@ $("icsBtn").addEventListener("click",()=>{
   const week=new Date(now.getTime()+6*86400000);
   $("expTo").value=week.getFullYear()+"-"+String(week.getMonth()+1).padStart(2,"0")+"-"+String(week.getDate()).padStart(2,"0");
   $("tz").value=(-now.getTimezoneOffset()/60);
-  // keep Bisha defaults for coords; tz from device
   ["lat","lon","tz","date"].forEach(id=>$(id).addEventListener("input",render));
   render();
 })();
